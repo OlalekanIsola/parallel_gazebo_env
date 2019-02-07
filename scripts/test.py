@@ -26,14 +26,6 @@ class Worker(mp.Process):
         #to parallelizing
         os.environ['ROS_MASTER_URI'] = "http://localhost:" + str(self.port) + '/'
         rospy.init_node('parallelSimulationNode')
-        rospy.wait_for_service('/panda1/controller_manager/switch_controller')
-        try:
-            load_controller = rospy.ServiceProxy('/panda1/controller_manager/load_controller', LoadController)
-            switch_controller = rospy.ServiceProxy('/panda1/controller_manager/switch_controller', SwitchController)
-            result = load_controller('position_joint_trajectory_controller')
-            result = switch_controller(['position_joint_trajectory_controller'], [], 2)
-        except rospy.ServiceException, e:
-            print "Service call failed: %s" %e
 
         pub = rospy.Publisher('/panda1/position_joint_trajectory_controller/command', JointTrajectory, queue_size=1)
 
