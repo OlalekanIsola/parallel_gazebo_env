@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env python3
 
 import os
 import time
@@ -6,7 +6,7 @@ import copy
 import multiprocessing as mp
 
 import rospy
-from tf.transformations import euler_from_quaternion
+# from tf.transformations import euler_from_quaternion
 from controller_manager_msgs.srv import SwitchController, LoadController
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 
@@ -52,7 +52,7 @@ class Worker(mp.Process):
                 forward = True
             with self.global_number.get_lock():
                 self.global_number.value += 1
-            print self.port, ' global_number: ', self.global_number.value
+            print('{} global_number: {}'.format(self.port, self.global_number.value))
             rate.sleep()
 
 

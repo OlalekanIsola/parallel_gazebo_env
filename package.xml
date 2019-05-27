@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>imitation_learning</name>
+  <name>parallel_gazebo_env</name>
   <version>0.0.0</version>
   <description>Learning robot poses from a teacher.</description>
 
