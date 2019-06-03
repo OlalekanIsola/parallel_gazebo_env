@@ -3,6 +3,7 @@
 # import sys
 # import copy
 import rospy
+import rosbag
 import gym
 import csv
 import time
@@ -21,11 +22,15 @@ class GazeboEnvFullPanda(gym.Env):
 
     def __init__(self, step_size):
         super(GazeboEnvFullPanda, self).__init__()
+        self.steps_done = 0
         self.step_size = step_size
         self.l_positions = [0.0] * 7
         self.l_velocities = [0.0] * 7
         self.t_positions = [0.0] * 7
         self.t_velocities = [0.0] * 7
+
+        self.bagfile = rosbag.Bag('../resources/torque_trajectory_002.bag')
+        self.bagfile_start_time = rospy.Time(self.bagfile.get_start_time())
 
         rospy.init_node('gym_environment_wrapper')
 
@@ -66,6 +71,7 @@ class GazeboEnvFullPanda(gym.Env):
         self._command_publisher.publish(self._command_zero)
         self._reset_gazebo_service()
         self._pause_gazebo_service()
+        self.steps_done = 0
 
     def step(self, action):
         assert len(action) is 7, "Action needs to consist of 7 numbers!"
@@ -74,8 +80,9 @@ class GazeboEnvFullPanda(gym.Env):
         self._command.data = action
         self._command_publisher.publish(self._command)
         rospy.sleep(self.step_size)
-        # TODO Last observation
         self._pause_gazebo_service()
+        self.steps_done += 1
+        # TODO Last observation
         # TODO Calculate reward
 
     def render(self, mode='human', close='False'):
@@ -96,6 +103,13 @@ class GazeboEnvFullPanda(gym.Env):
         self._switch_controller_service(start_controllers=['franka_sim_state_controller'],
                                         strictness=SwitchControllerRequest.BEST_EFFORT)
 
+    def _get_expert_state_from_bagfile(self, step):
+        # Go one step ahead, otherwise data from bag will have a little delay
+        step += 1
+        expert_joint_state = next(self.bagfile.read_messages(topics=['/panda1/joint_states'],
+                                                        start_time=self.bagfile_start_time + rospy.Duration(self.step_size * step)))[1]
+        # TODO: Catch StopIteration!!!
+        return expert_joint_state.position, expert_joint_state.velocity, expert_joint_state.effort
 
 if __name__ == '__main__':
     env = GazeboEnvFullPanda(0.1)
@@ -105,3 +119,12 @@ if __name__ == '__main__':
         csv_reader = csv.reader(csvfile, delimiter=',', quoting=csv.QUOTE_NONNUMERIC)
         for line in csv_reader:
             env.step(line)
+            print(line)
+            print(env._get_expert_state_from_bagfile(env.steps_done)[2])
+            print("")
+
+    # with rosbag.Bag('../resources/torque_trajectory_002.bag') as bagfile:
+    #     start_time = rospy.Time(bagfile.get_start_time())
+    #     for i in range(130):
+    #         print(next(bagfile.read_messages(topics=['/panda1/joint_states'],
+    #                                          start_time=start_time + rospy.Duration(env.step_size * i))))
