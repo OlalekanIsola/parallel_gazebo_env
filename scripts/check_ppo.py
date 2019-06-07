@@ -8,7 +8,7 @@ from stable_baselines.common.vec_env import DummyVecEnv
 
 
 env = DummyVecEnv([lambda: GazeboEnvFullPanda(0.1, '../resources/torque_trajectory_002.bag')])
-model = PPO2.load("ppo2_identical_pandas_copy_torques")
+model = PPO2.load("ppo2_identical_pandas_copy_torques", tensorboard_log="./ppo2_identical_pandas_copy_torques_tensorboard/")
 
 obs = env.reset()
 done = False
