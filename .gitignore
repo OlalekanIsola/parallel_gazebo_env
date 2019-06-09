@@ -1,1 +1,3 @@
-*__pycache__*
+scripts/ppo2_identical_pandas_copy_torques_tensorboard/
+scripts/.idea/
+scripts/__pycache__/
