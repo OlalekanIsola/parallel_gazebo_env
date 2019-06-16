@@ -7,7 +7,7 @@ from stable_baselines.common.policies import  MlpPolicy
 from stable_baselines.common.vec_env import DummyVecEnv
 
 
-env = DummyVecEnv([lambda: GazeboEnvFullPanda(0.1, '../resources/torque_trajectory_002.bag')])
+env = DummyVecEnv([lambda: GazeboEnvFullPanda(0.1, '../resources/torque_trajectory_002.bag', 10.0)])
 model = PPO2.load("ppo2_identical_pandas_copy_torques", tensorboard_log="./ppo2_identical_pandas_copy_torques_tensorboard/")
 
 obs = env.reset()
