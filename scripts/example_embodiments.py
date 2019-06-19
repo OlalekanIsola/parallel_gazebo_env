@@ -40,7 +40,6 @@ panda_relative_joint_frames = np.array([[[1, 0, 0, 0],
                                          [0, 0, 0, 1]]], dtype='float32')
 # Frames that define the link, each as seen from the joint frame to the next link
 # x-axis should point along main line of link towards the next link
-# TODO: Set right frames
 panda_relative_link_frames = np.array([[[0, 1, 0, 0],
                                         [-1, 0, 0, 0.12],
                                         [0, 0, 1, -0.01],
@@ -203,7 +202,7 @@ fourlink_relative_link_frames = np.array(
     dtype='float32')
 
 panda_embodiment = embodiment.Embodiment(panda_relative_joint_frames, panda_parent_ids, panda_relative_link_frames)
-panda_embodiment.link_dists_from_origin = [21.0237979888916, 44.70839500427246, 60.739611089229584, 68.73960942029953, 89.23741430044174, 104.52270060777664, 113.0667082965374]
+panda_embodiment.link_dists_from_origin = [0.16057740356113898, 0.3414777004183537, 0.4639223628787724, 0.5403012448100774, 0.7034305162879936, 0.8201778297256058, 0.8854359750540293]
 branched_embodiment = embodiment.Embodiment(branched_relative_joint_frames, branched_parent_ids, branched_relative_link_frames)
 twolink_embodiment = embodiment.Embodiment(twolink_relative_joint_frames, twolink_parent_ids, twolink_relative_link_frames)
 twolink2_embodiment = embodiment.Embodiment(twolink2_relative_joint_frames, twolink_parent_ids, twolink2_relative_link_frames)

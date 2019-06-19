@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
-# import sys
-# import copy
+import sys
 import rospy
 import rosbag
 import gym
@@ -15,7 +14,6 @@ from std_srvs.srv import Empty
 from controller_manager_msgs.srv import SwitchController, SwitchControllerRequest
 import example_embodiments
 
-# TODO: NaN prevention -> include recent action in state? RNN?
 # TODO: Use timestamp from last joint_state to get bag message?
 # TODO: Short Motion after resetting?
 # TODO: Parallel environments
@@ -32,9 +30,10 @@ def link_distance(data_matrix1, data_matrix2):
     :param data_matrix2: Data matrix from link 2
     :return: The distance measure between the two frames (scalar).
     """
+    weight_t_dist = 0.0
     weight_o_dist = 1.0
-    weight_lin_vel = 0.1
-    weight_rot_vel = 0.1
+    weight_lin_vel = 0.0001
+    weight_rot_vel = 0.01
 
     translation_distance = np.linalg.norm(data_matrix1[:, 3] - data_matrix2[:, 3])
 
@@ -47,8 +46,8 @@ def link_distance(data_matrix1, data_matrix2):
     lin_vel_distance = np.linalg.norm(data_matrix1[:, 1] - data_matrix2[:, 1])
     rot_vel_distance = np.linalg.norm(data_matrix1[:, 2] - data_matrix2[:, 2])
 
-    #return translation_distance + weight_o_dist * orientation_distance + weight_lin_vel * lin_vel_distance + weight_rot_vel * rot_vel_distance
-    return weight_o_dist * orientation_distance + weight_lin_vel * lin_vel_distance + weight_rot_vel * rot_vel_distance
+    return translation_distance + weight_o_dist * orientation_distance + weight_lin_vel * lin_vel_distance + weight_rot_vel * rot_vel_distance
+    #return weight_o_dist * orientation_distance + weight_lin_vel * lin_vel_distance + weight_rot_vel * rot_vel_distance
 
 
 def cartesian_product(list1, list2, flat=True):
@@ -77,11 +76,13 @@ def cartesian_product(list1, list2, flat=True):
         return np.reshape(flat_cartesian_product, desired_shape)
 
 
-def calculate_weight_matrix(e_embodiment, l_embodiment):
+def calculate_weight_matrix(e_embodiment, l_embodiment, distinctness=100):
     """
     Compute the weight matrix that asymetrically assigns the links of each embodiment to links of the other embodiment.
     :param e_embodiment: The expert embodiment.
     :param l_embodiment: The learner embodiment.
+    :param distinctness: The further away the inputs of the softmin function are, the more distinct the minimum will be.
+                         Therefore, the input range of the softmin function can be stretched using this factor.
     :return: A e_n_links x l_n_links matrix with weights.
     """
     cart_product_chain_positions = np.transpose([np.repeat(e_embodiment.link_dists_from_origin,
@@ -94,8 +95,11 @@ def calculate_weight_matrix(e_embodiment, l_embodiment):
     # argmaxes_el = np.argmin(distance_matrix, 0)
     # argmaxes_le = np.argmin(distance_matrix, 1)
     # weight_matrix = np.zeros(e_embodiment.num_links, l_embodiment.num_links)
-    sm_el = special.softmax(-distance_matrix, 0)
-    sm_le = special.softmax(-distance_matrix, 1)
+
+    # Distinctness determines distinctness of softmin result, using negative factor because only softmax function exists
+    distance_matrix_sm = np.multiply(distance_matrix, -distinctness)
+    sm_el = special.softmax(distance_matrix_sm, 0)
+    sm_le = special.softmax(distance_matrix_sm, 1)
     weight_matrix = sm_el + sm_le
     return weight_matrix
 
@@ -117,6 +121,7 @@ class GazeboEnvFullPanda(gym.Env):
         self.e_embodiment = e_embodiment
         self.l_embodiment = l_embodiment
         self.weight_matrix = calculate_weight_matrix(e_embodiment, l_embodiment)
+        self.last_time_stamp = 0.0
         self.e_position = [0.0] * e_embodiment.num_links
         self.e_velocity = [0.0] * e_embodiment.num_links
         self.l_position = [0.0] * l_embodiment.num_links
@@ -146,12 +151,12 @@ class GazeboEnvFullPanda(gym.Env):
         if DEBUG: print("Services registered.")
 
         # TODO: Find good value for max reward
-        self.reward_range = (-5, 0)
+        self.reward_range = (-2, 0)
 
         # Joint torque ranges
         self.action_space = gym.spaces.Box(
-            low=np.array([-87, -87, -87, -87, -12, -12, -12]),
-            high=np.array([87, 87, 87, 87, 12, 12, 12]),
+            low=np.array([-87, -87, -87, -87, -12, -12, -0.1]),
+            high=np.array([87, 87, 87, 87, 12, 12, 0.1]),
             dtype='float32')
 
         # Respectively: l_joint_angles, l_joint_vels, t_joint_angles, t_joint_vels
@@ -184,17 +189,20 @@ class GazeboEnvFullPanda(gym.Env):
         if DEBUG: print("Gazebo reset.")
         self._unpause_gazebo_service()
         if DEBUG: print("Gazebo unpaused.")
-        self._restart_joint_state_controller()
+        self._restart_controller('franka_sim_state_controller')
         if DEBUG: print("Joint State Controller resetted.")
         self._received_first_ldata = False
         while self._received_first_ldata is False:
-            # TODO: better a sleep function? Resolve issues with ROS clock?
-            pass
+            try:
+                rospy.sleep(0.1)
+            except rospy.exceptions.ROSTimeMovedBackwardsException:
+                pass
+        #self._restart_controller('effort_jointgroup_controller')
         self._pause_gazebo_service()
         if DEBUG: print("Gazebo paused.")
         self.current_step = 0
         try:
-            self.e_position, self.e_velocity = self._get_expert_state_from_bagfile(self.current_step)
+            self.e_position, self.e_velocity = self._get_expert_state_from_bagfile(self.last_time_stamp)
             self.done = False
         except StopIteration:
             if DEBUG: print("StopIteration Exception! Setting done->False")
@@ -210,23 +218,29 @@ class GazeboEnvFullPanda(gym.Env):
         :param action: A list of joint efforts to send to the joints of the learner.
         :return: The current state/observation, the immediate reward and the 'done' flag.
         """
-        if DEBUG: print("Running step with: {}".format(action))
-        command_difference = [np.abs(action_val - last_action_val) for action_val, last_action_val in zip(action, self._command.data)]
-        max_command_difference = np.max(command_difference)
-        if max_command_difference >= 0.9:
-            if DEBUG: print("Step: {} Received too large difference in effort command! Ending episode, robot destroyed.".format(self.current_step))
-            reward  = -5
-            observation = [self.l_position, self.l_velocity, self.e_position, self.e_velocity]
-            return observation, reward, True, {}
+        if DEBUG: print("Running step {} with:\n{}".format(self.current_step, action))
+        # command_difference = [np.abs(action_val - last_action_val) for action_val, last_action_val in zip(action, self._command.data)]
+        # max_command_difference = np.max(command_difference)
+        # if max_command_difference >= 0.9:
+        #     if DEBUG: print("Step: {} Received too large difference in effort command! Ending episode, robot destroyed.".format(self.current_step))
+        #     reward = -5
+        #     observation = [self.l_position, self.l_velocity, self.e_position, self.e_velocity]
+        #     return observation, reward, False, {}
 
         self._unpause_gazebo_service()
         if DEBUG: print("Unpaused Gazebo.")
-        self._restart_joint_state_controller()
+        self._restart_controller('franka_sim_state_controller')
         if DEBUG: print("Restarted joint state controller.")
         self._command.data = action
         self._command_publisher.publish(self._command)
         if DEBUG: print("Published action.")
-        rospy.sleep(self.step_size)
+        try:
+            rospy.sleep(self.step_size)
+            slept = True
+        except rospy.exceptions.ROSTimeMovedBackwardsException:
+            slept = False
+        if slept is False:
+            rospy.sleep(self.step_size)
         if DEBUG: print("Slept.")
         self._pause_gazebo_service()
         if DEBUG: print("Paused Gazebo.")
@@ -234,13 +248,13 @@ class GazeboEnvFullPanda(gym.Env):
         done = False
 
         try:
-            self.e_position, self.e_velocity = self._get_expert_state_from_bagfile(self.current_step)
+            self.e_position, self.e_velocity = self._get_expert_state_from_bagfile(self.last_time_stamp)
         except StopIteration:
             if DEBUG: print("StopIteration Exception! Setting done->False")
             done = True
 
         reward = self._calculate_reward(self.e_position, self.e_velocity, self.l_position, self.e_velocity)
-        if DEBUG: print("Reward: {}".format(reward))
+        if DEBUG: print("Reward: {}\n\n".format(reward))
         observation = [self.l_position, self.l_velocity, self.e_position, self.e_velocity]
 
         return observation, reward, done, {}
@@ -256,37 +270,39 @@ class GazeboEnvFullPanda(gym.Env):
         """
         # if DEBUG: print("Callback start")
         if np.isnan(joint_state.position).any() or np.isnan(joint_state.velocity).any():
-            if DEBUG: print("Received NaN in learner data!")
-            return
+            if DEBUG: print("Received NaN in learner datas!")
         self.l_position = joint_state.position
         self.l_velocity = joint_state.velocity
+        self.last_time_stamp = joint_state.header.stamp.secs + 1e-9 * joint_state.header.stamp.nsecs
         # if DEBUG: print("Callback end")
         if not self._received_first_ldata:
             self._received_first_ldata = True
 
-    def _restart_joint_state_controller(self):
+    def _restart_controller(self, controller):
         """
         It is necessary to restart the joint state controller each time after unpausing gazebo in order to publish/
         receive joint_state messages.
         :return: None
         """
-        self._switch_controller_service(stop_controllers=['franka_sim_state_controller'],
+        self._switch_controller_service(stop_controllers=[controller],
                                         strictness=SwitchControllerRequest.BEST_EFFORT)
-        self._switch_controller_service(start_controllers=['franka_sim_state_controller'],
+        self._switch_controller_service(start_controllers=[controller],
                                         strictness=SwitchControllerRequest.BEST_EFFORT)
 
-    def _get_expert_state_from_bagfile(self, step):
+        # franka_sim_state_controller
+        # effort_jointgroup_controller
+
+    def _get_expert_state_from_bagfile(self, time):
         """
         Gets a joint_message to the corresponding time of the given step from the bagfile and extracts the joint
         position and velocity (representing the state of the expert).
-        :param step: Current step number.
+        :param time: The timestep, where the message will be retrieved as float in seconds. Time starts counting at
+                     time of first message in bag.
         :return: Lists containing the joint positions and velocities
         """
         if DEBUG: print("Getting expert state from bagfile.")
-        # Go one step ahead, otherwise data from bag will have a little delay
-        step += 1
         expert_joint_state = next(self.bagfile.read_messages(topics=['/panda1/joint_states'],
-                                                             start_time=self.bagfile_start_time + rospy.Duration(self.step_size * step),
+                                                             start_time=self.bagfile_start_time + rospy.Duration(time),
                                                              end_time=self.bagfile_start_time + rospy.Duration(self.duration)))[1]
         return expert_joint_state.position, expert_joint_state.velocity
 
@@ -303,7 +319,7 @@ class GazeboEnvFullPanda(gym.Env):
 
 
 if __name__ == '__main__':
-    env = GazeboEnvFullPanda(0.1, 4.0, '../resources/torque_trajectory_002.bag', example_embodiments.panda_embodiment, example_embodiments.panda_embodiment)
+    env = GazeboEnvFullPanda(0.1, 2.0, '../resources/torque_trajectory_002.bag', example_embodiments.panda_embodiment, example_embodiments.panda_embodiment)
     env.reset()
     #quit()
 
@@ -312,8 +328,6 @@ if __name__ == '__main__':
         for line in csv_reader:
             obs, reward, done, _ = env.step(line)
             if done: break
-            #print(line)
-            #print(env._get_expert_state_from_bagfile(env.current_step)[2])
             print("")
 
     # with rosbag.Bag('../resources/torque_trajectory_002.bag') as bagfile:

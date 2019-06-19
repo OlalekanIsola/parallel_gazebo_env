@@ -24,7 +24,7 @@ def rotmat_z_dot(angle, angle_dot):
 
 
 class Embodiment:
-    def __init__(self, relative_joint_frames, parent_ids, relative_link_frames=None, normalize_to=100):
+    def __init__(self, relative_joint_frames, parent_ids, relative_link_frames=None):
         assert parent_ids[0] is None, "First element of learner_parent_ids must me 'None'!"
         for i in range(1, len(parent_ids)):
             assert parent_ids[i] < i, "Elements in learner_parent_ids can only refer to elements to the left!"
@@ -34,7 +34,7 @@ class Embodiment:
         self.parent_ids = parent_ids
 
         self.chain_length, self.chain_lengths = self._longest_chain_length()
-        self.normalization_factor = normalize_to / self.chain_length
+        self.normalization_factor = 1.0 / self.chain_length
         self.relative_joint_frames_normalized = self.relative_joint_frames.copy()
         self.relative_joint_frames_normalized[:, 0:3, 3] *= self.normalization_factor
 
@@ -172,18 +172,18 @@ class Embodiment:
         return dists_from_origin
 
     @staticmethod
-    def create_n_link_embodiment(n, normalize_to=100, link_offset=0.5):
-        link_length = normalize_to / n
-        relative_joint_frames = [[[1, 0, 0, link_length],
-                                  [0, 1, 0, 0],
-                                  [0, 0, 1, 0],
-                                  [0, 0, 0, 1]]] * n
-        relative_link_frames = [[[1, 0, 0, -link_length * link_offset],
-                                 [0, 1, 0, 0],
-                                 [0, 0, 1, 0],
-                                 [0, 0, 0, 1]]] * n
+    def create_n_link_embodiment(n, link_offset=0.5):
+        link_length = 1.0 / n
+        relative_joint_frames = np.array([[[1, 0, 0, link_length],
+                                           [0, 1, 0, 0],
+                                           [0, 0, 1, 0],
+                                           [0, 0, 0, 1]]] * n)
+        relative_link_frames = np.array([[[1, 0, 0, -link_length * link_offset],
+                                          [0, 1, 0, 0],
+                                          [0, 0, 1, 0],
+                                          [0, 0, 0, 1]]] * n)
         parent_ids = [None] + list(range(n - 1))
         # print(relative_joint_frames)
         # print(relative_link_frames)
 
-        return Embodiment(relative_joint_frames, parent_ids, relative_link_frames, normalize_to)
+        return Embodiment(relative_joint_frames, parent_ids, relative_link_frames)
