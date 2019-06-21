@@ -14,12 +14,16 @@ from std_srvs.srv import Empty
 from controller_manager_msgs.srv import SwitchController, SwitchControllerRequest
 import example_embodiments
 
-# TODO: Use timestamp from last joint_state to get bag message?
-# TODO: Short Motion after resetting?
+
+# TODO: Abort learning
+# TODO: Show both embodiments in check_ppo
+# TODO: Generalization to different trajectories
+# TODO: Different embodiments/lock joints
 # TODO: Parallel environments
+# TODO: Short Motion after resetting?
 
 
-DEBUG = True
+DEBUG = False
 
 
 def link_distance(data_matrix1, data_matrix2):
@@ -319,7 +323,7 @@ class GazeboEnvFullPanda(gym.Env):
 
 
 if __name__ == '__main__':
-    env = GazeboEnvFullPanda(0.1, 2.0, '../resources/torque_trajectory_002.bag', example_embodiments.panda_embodiment, example_embodiments.panda_embodiment)
+    env = GazeboEnvFullPanda(0.1, 3.0, '../resources/torque_trajectory_002.bag', example_embodiments.panda_embodiment, example_embodiments.panda_embodiment)
     env.reset()
     #quit()
 

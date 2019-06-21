@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 
 from gazebo_env import GazeboEnvFullPanda
-import gym
+import example_embodiments
 from stable_baselines import PPO2
 from stable_baselines.common.policies import  MlpPolicy
 from stable_baselines.common.vec_env import DummyVecEnv
 
 
-env = DummyVecEnv([lambda: GazeboEnvFullPanda(0.1, '../resources/torque_trajectory_002.bag', 10.0)])
-model = PPO2.load("ppo2_identical_pandas_copy_torques", tensorboard_log="./ppo2_identical_pandas_copy_torques_tensorboard/")
+env = DummyVecEnv([lambda: GazeboEnvFullPanda(0.1, 3.0, '../resources/torque_trajectory_002.bag', example_embodiments.panda_embodiment, example_embodiments.panda_embodiment)])
+model = PPO2.load("../runs/models/ppo2_identical_pandas_4s_2019_06_19", tensorboard_log="../runs/tensorboard/ppo2_identical_pandas_2019_06_18/")
 
 obs = env.reset()
 done = False
