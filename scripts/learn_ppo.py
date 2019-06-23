@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from gazebo_env import GazeboEnvFullPanda
+from gazebo_env import GazeboEnv
 import time
 import numpy as np
 import example_embodiments
@@ -13,7 +13,7 @@ from stable_baselines.bench import Monitor
 description_str = "e7_l7_4sec_gamma0.4_callbacktest"
 log_dir = "../runs/tensorboard/ppo2_identical_pandas_2019_06_18/"
 continue_learning = True
-gazebo_env = GazeboEnvFullPanda(0.1, 4.0, '../resources/torque_trajectory_002.bag', example_embodiments.panda_embodiment, example_embodiments.panda_embodiment)
+gazebo_env = GazeboEnv(0.1, 4.0, '../resources/torque_trajectory_002.bag', example_embodiments.panda_embodiment, example_embodiments.panda_embodiment)
 env = DummyVecEnv([lambda: Monitor(gazebo_env, "../runs/monitor/", allow_early_resets=True)])
 
 if continue_learning:

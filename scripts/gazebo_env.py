@@ -15,8 +15,6 @@ from controller_manager_msgs.srv import SwitchController, SwitchControllerReques
 import example_embodiments
 
 
-# TODO: Abort learning
-# TODO: Show both embodiments in check_ppo
 # TODO: Generalization to different trajectories
 # TODO: Different embodiments/lock joints
 # TODO: Parallel environments
@@ -108,14 +106,24 @@ def calculate_weight_matrix(e_embodiment, l_embodiment, distinctness=100):
     return weight_matrix
 
 
-class GazeboEnvFullPanda(gym.Env):
+class GazeboEnv(gym.Env):
     """
-    An openAI gym environment to learn how to copy a robot motion.
+    An openAI gym environment to learn how to copy a robot motion. It uses ROS and Gazebo to simulate the robot's
+    dynamics as well as read the expert's trajectories.
     """
     metadata = {'render.modes': ['human']}
 
     def __init__(self, step_size, duration, bagfile, e_embodiment, l_embodiment):
-        super(GazeboEnvFullPanda, self).__init__()
+        """
+        Init method.
+        :param step_size: Duration between steps in seconds. This is the time the simulation runs after sending the
+            current action as command to the controller before being paused again.
+        :param duration: The time in seconds that the expert trajectory is being run.
+        :param bagfile: Location of the bagfile with the expert's trajectory (using joint_state messages).
+        :param e_embodiment: The expert embodiment.
+        :param l_embodiment: The learner embodiment.
+        """
+        super(GazeboEnv, self).__init__()
         self.current_step = 0
         self.done = False
         self.step_size = step_size
@@ -128,6 +136,7 @@ class GazeboEnvFullPanda(gym.Env):
         self.last_time_stamp = 0.0
         self.e_position = [0.0] * e_embodiment.num_links
         self.e_velocity = [0.0] * e_embodiment.num_links
+        self.e_effort = [0.0] * e_embodiment.num_links
         self.l_position = [0.0] * l_embodiment.num_links
         self.l_velocity = [0.0] * l_embodiment.num_links
 
@@ -206,7 +215,7 @@ class GazeboEnvFullPanda(gym.Env):
         if DEBUG: print("Gazebo paused.")
         self.current_step = 0
         try:
-            self.e_position, self.e_velocity = self._get_expert_state_from_bagfile(self.last_time_stamp)
+            self.e_position, self.e_velocity, self.e_effort = self._get_expert_state_from_bagfile(self.last_time_stamp)
             self.done = False
         except StopIteration:
             if DEBUG: print("StopIteration Exception! Setting done->False")
@@ -223,13 +232,6 @@ class GazeboEnvFullPanda(gym.Env):
         :return: The current state/observation, the immediate reward and the 'done' flag.
         """
         if DEBUG: print("Running step {} with:\n{}".format(self.current_step, action))
-        # command_difference = [np.abs(action_val - last_action_val) for action_val, last_action_val in zip(action, self._command.data)]
-        # max_command_difference = np.max(command_difference)
-        # if max_command_difference >= 0.9:
-        #     if DEBUG: print("Step: {} Received too large difference in effort command! Ending episode, robot destroyed.".format(self.current_step))
-        #     reward = -5
-        #     observation = [self.l_position, self.l_velocity, self.e_position, self.e_velocity]
-        #     return observation, reward, False, {}
 
         self._unpause_gazebo_service()
         if DEBUG: print("Unpaused Gazebo.")
@@ -252,7 +254,7 @@ class GazeboEnvFullPanda(gym.Env):
         done = False
 
         try:
-            self.e_position, self.e_velocity = self._get_expert_state_from_bagfile(self.last_time_stamp)
+            self.e_position, self.e_velocity, self.e_effort = self._get_expert_state_from_bagfile(self.last_time_stamp)
         except StopIteration:
             if DEBUG: print("StopIteration Exception! Setting done->False")
             done = True
@@ -308,7 +310,7 @@ class GazeboEnvFullPanda(gym.Env):
         expert_joint_state = next(self.bagfile.read_messages(topics=['/panda1/joint_states'],
                                                              start_time=self.bagfile_start_time + rospy.Duration(time),
                                                              end_time=self.bagfile_start_time + rospy.Duration(self.duration)))[1]
-        return expert_joint_state.position, expert_joint_state.velocity
+        return expert_joint_state.position, expert_joint_state.velocity, expert_joint_state.effort
 
     def _calculate_reward(self, e_angles, e_angle_velocities, l_angles, l_angle_velocities):
         e_data_matrices, e_absolute_joint_frames = self.e_embodiment.data_matrices(e_angles, e_angle_velocities)
@@ -323,7 +325,7 @@ class GazeboEnvFullPanda(gym.Env):
 
 
 if __name__ == '__main__':
-    env = GazeboEnvFullPanda(0.1, 3.0, '../resources/torque_trajectory_002.bag', example_embodiments.panda_embodiment, example_embodiments.panda_embodiment)
+    env = GazeboEnv(0.1, 3.0, '../resources/torque_trajectory_002.bag', example_embodiments.panda_embodiment, example_embodiments.panda_embodiment)
     env.reset()
     #quit()
 

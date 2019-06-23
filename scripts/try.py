@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from gazebo_env import GazeboEnvFullPanda
+from gazebo_env import GazeboEnv
 import gym
 from stable_baselines import PPO2
 from stable_baselines.common.policies import  MlpPolicy
@@ -9,7 +9,7 @@ import csv
 import example_embodiments
 
 
-env = GazeboEnvFullPanda(0.1, 4.0, '../resources/torque_trajectory_002.bag', example_embodiments.panda_embodiment, example_embodiments.panda_embodiment)
+env = GazeboEnv(0.1, 4.0, '../resources/torque_trajectory_002.bag', example_embodiments.panda_embodiment, example_embodiments.panda_embodiment)
 
 env.reset()
 
