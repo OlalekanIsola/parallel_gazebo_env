@@ -8,7 +8,7 @@ from stable_baselines.common.policies import  MlpPolicy
 from stable_baselines.common.vec_env import DummyVecEnv
 
 
-env = DummyVecEnv([lambda: GazeboEvalEnv(0.1, 3.0, '../resources/torque_trajectory_002.bag', example_embodiments.panda_embodiment, example_embodiments.panda_embodiment)])
+env = DummyVecEnv([lambda: GazeboEvalEnv(0.1, 5.0, '../resources/torque_trajectory_003.bag', example_embodiments.panda_embodiment, example_embodiments.panda_embodiment)])
 model = PPO2.load("../runs/models/e7_l7_4sec_gamma0.4_callbacktest_best", tensorboard_log="../runs/tensorboard/ppo2_identical_pandas_2019_06_18/")
 
 obs = env.reset()

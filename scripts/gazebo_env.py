@@ -18,7 +18,6 @@ import example_embodiments
 # TODO: Generalization to different trajectories
 # TODO: Different embodiments/lock joints
 # TODO: Parallel environments
-# TODO: Short Motion after resetting?
 
 
 DEBUG = False
@@ -34,8 +33,8 @@ def link_distance(data_matrix1, data_matrix2):
     """
     weight_t_dist = 0.0
     weight_o_dist = 1.0
-    weight_lin_vel = 0.0001
-    weight_rot_vel = 0.01
+    weight_lin_vel = 0.1
+    weight_rot_vel = 0.1
 
     translation_distance = np.linalg.norm(data_matrix1[:, 3] - data_matrix2[:, 3])
 
@@ -48,7 +47,7 @@ def link_distance(data_matrix1, data_matrix2):
     lin_vel_distance = np.linalg.norm(data_matrix1[:, 1] - data_matrix2[:, 1])
     rot_vel_distance = np.linalg.norm(data_matrix1[:, 2] - data_matrix2[:, 2])
 
-    return translation_distance + weight_o_dist * orientation_distance + weight_lin_vel * lin_vel_distance + weight_rot_vel * rot_vel_distance
+    return weight_t_dist * translation_distance + weight_o_dist * orientation_distance + weight_lin_vel * lin_vel_distance + weight_rot_vel * rot_vel_distance
     #return weight_o_dist * orientation_distance + weight_lin_vel * lin_vel_distance + weight_rot_vel * rot_vel_distance
 
 
