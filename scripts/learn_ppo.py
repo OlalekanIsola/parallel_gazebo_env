@@ -10,20 +10,22 @@ from stable_baselines.common.vec_env import DummyVecEnv
 from stable_baselines.results_plotter import ts2xy, load_results
 from stable_baselines.bench import Monitor
 
-description_str = "e7_l7_4sec_gamma0.4_callbacktest"
-log_dir = "../runs/tensorboard/ppo2_identical_pandas_2019_06_18/"
+description_str = "trajectory010_e7_l7_5sec_gamma0.3_t0_r1.0_lin0.001_rot0.01"
+log_dir = "../runs/tensorboard/ppo2_2019_06_26_trajectory010/"
 continue_learning = True
-gazebo_env = GazeboEnv(0.1, 4.0, '../resources/torque_trajectory_002.bag', example_embodiments.panda_embodiment, example_embodiments.panda_embodiment)
+# bagfiles = ["../resources/torque_trajectory_{0:03}.bag".format(i) for i in range(2, 10)]
+bagfiles = ["../resources/torque_trajectory_010.bag"]
+gazebo_env = GazeboEnv(0.1, 5.0, bagfiles, example_embodiments.panda_embodiment, example_embodiments.panda_embodiment)
 env = DummyVecEnv([lambda: Monitor(gazebo_env, "../runs/monitor/", allow_early_resets=True)])
 
 if continue_learning:
-    model = PPO2.load("../runs/models/" "ppo2_identical_pandas_4s_2019_06_19.pkl",
+    model = PPO2.load("../runs/models/trajectory010_e7_l7_5sec_gamma0.3_t0_r1.0_lin0.001_rot0.01_best.pkl",
                       env=env,
                       tensorboard_log=log_dir)
 else:
     model = PPO2(MlpPolicy, env, verbose=2,
                  tensorboard_log=log_dir,
-                 gamma=0.4,
+                 gamma=0.3,
                  # n_steps=30,
                  # nminibatches=1
                  )
@@ -39,12 +41,12 @@ def callback(_locals, _globals):
     """
     global n_steps, best_mean_reward
     # Print stats every 256 calls
-    if (n_steps + 1) % 256 == 0:
+    if (n_steps + 1) % 100 == 0:
         # Evaluate policy training performance
         x, y = ts2xy(load_results("../runs/monitor/"), 'timesteps')
         if len(x) > 0:
             start_time = time.time()
-            mean_reward = np.mean(y[-32768:])
+            mean_reward = np.mean(y[-12800:])
             print("{} seconds for mean calculation".format(time.time() - start_time))
             print(x[-1], 'timesteps')
             print("Best mean reward: {:.2f}, Last mean reward per episode: {:.2f}".format(best_mean_reward, mean_reward))
@@ -59,7 +61,7 @@ def callback(_locals, _globals):
     return True
 
 
-model.learn(total_timesteps=1000000,
+model.learn(total_timesteps=10000000,
             tb_log_name=description_str,
             callback=callback)
 

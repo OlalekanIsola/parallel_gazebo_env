@@ -24,7 +24,7 @@ def rotmat_z_dot(angle, angle_dot):
 
 
 class Embodiment:
-    def __init__(self, relative_joint_frames, parent_ids, relative_link_frames=None):
+    def __init__(self, relative_joint_frames, parent_ids, relative_link_frames=None, angle_ranges=None, velocity_ranges=None):
         assert parent_ids[0] is None, "First element of learner_parent_ids must me 'None'!"
         for i in range(1, len(parent_ids)):
             assert parent_ids[i] < i, "Elements in learner_parent_ids can only refer to elements to the left!"
@@ -39,15 +39,33 @@ class Embodiment:
         self.relative_joint_frames_normalized[:, 0:3, 3] *= self.normalization_factor
 
         if relative_link_frames is None:
-            self.relative_link_frames = [np.eye(4, 4) for _ in range(len(parent_ids))]
+            self.relative_link_frames = np.array([np.eye(4, 4) for _ in range(len(parent_ids))])
         else:
             self.relative_link_frames = relative_link_frames
         self.relative_link_frames_normalized = self.relative_link_frames.copy()
         self.relative_link_frames_normalized[:, 0: 3, 3] *= self.normalization_factor
 
+        if angle_ranges is None:
+            self.angle_ranges = np.array([[-np.pi] * self.num_links,
+                                          [np.pi] * self.num_links])
+        else:
+            assert len(angle_ranges[0]) is self.num_links
+            assert len(angle_ranges[1]) is self.num_links
+            self.angle_ranges = np.array(angle_ranges)
+        self.angle_intervals = self.angle_ranges[1] - self.angle_ranges[0]
+
+        if velocity_ranges is None:
+            self.velocity_ranges = np.array([[-100] * self.num_links,
+                                             [100] * self.num_links])
+        else:
+            assert len(velocity_ranges[0]) is self.num_links
+            assert len(velocity_ranges[1]) is self.num_links
+            self.velocity_ranges = np.array(velocity_ranges)
+
         self.link_dists_from_origin = self._link_positions_in_chain()
 
     def absolute_joint_frames(self, joint_angles, normalized=False):
+        assert len(joint_angles) is self.num_links
         relative_transformations = [rotmat_z(angle) for angle in joint_angles]
         if normalized:
             relative_transformations = np.matmul(relative_transformations, self.relative_joint_frames_normalized)

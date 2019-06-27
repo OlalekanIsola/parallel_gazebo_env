@@ -5,6 +5,7 @@ import rospy
 import rosbag
 import gym
 import csv
+import random
 import time
 import numpy as np
 from scipy import special
@@ -20,7 +21,9 @@ import example_embodiments
 # TODO: Parallel environments
 
 
-DEBUG = False
+DEBUG_CURRENT_CODEPART = False
+DEBUG_STEP_ACTION = True
+
 
 
 def link_distance(data_matrix1, data_matrix2):
@@ -33,8 +36,8 @@ def link_distance(data_matrix1, data_matrix2):
     """
     weight_t_dist = 0.0
     weight_o_dist = 1.0
-    weight_lin_vel = 0.1
-    weight_rot_vel = 0.1
+    weight_lin_vel = 0.001
+    weight_rot_vel = 0.01
 
     translation_distance = np.linalg.norm(data_matrix1[:, 3] - data_matrix2[:, 3])
 
@@ -112,7 +115,7 @@ class GazeboEnv(gym.Env):
     """
     metadata = {'render.modes': ['human']}
 
-    def __init__(self, step_size, duration, bagfile, e_embodiment, l_embodiment):
+    def __init__(self, step_size, duration, bagfiles, e_embodiment, l_embodiment):
         """
         Init method.
         :param step_size: Duration between steps in seconds. This is the time the simulation runs after sending the
@@ -128,6 +131,8 @@ class GazeboEnv(gym.Env):
         self.step_size = step_size
         self.duration = duration
         self._received_first_ldata = False
+        self._actions_csv_file = open('../runs/monitor/last_episode_actions.csv', 'w')
+        self._actions_csv_writer = csv.writer(self._actions_csv_file, delimiter=',', quoting=csv.QUOTE_NONNUMERIC)
 
         self.e_embodiment = e_embodiment
         self.l_embodiment = l_embodiment
@@ -139,18 +144,19 @@ class GazeboEnv(gym.Env):
         self.l_position = [0.0] * l_embodiment.num_links
         self.l_velocity = [0.0] * l_embodiment.num_links
 
-        self.bagfile = rosbag.Bag(bagfile)
+        self.bagfilenames = bagfiles
+        self.bagfile = rosbag.Bag(bagfiles[0])
         self.bagfile_start_time = rospy.Time(self.bagfile.get_start_time())
-        if DEBUG: print("Bagfile opened.")
+        if DEBUG_CURRENT_CODEPART: print("Bagfile opened.")
 
         rospy.init_node('gym_environment_wrapper')
-        if DEBUG: print("ROS node initialized.")
+        if DEBUG_CURRENT_CODEPART: print("ROS node initialized.")
 
         self._joint_states_subscriber = rospy.Subscriber('panda1/joint_states', JointState, self._joint_state_callback, queue_size=1)
-        if DEBUG: print("Joint State Subscriber registered.")
+        if DEBUG_CURRENT_CODEPART: print("Joint State Subscriber registered.")
 
         self._command_publisher = rospy.Publisher('panda1/effort_jointgroup_controller/command', Float64MultiArray, queue_size=1)
-        if DEBUG: print("Command Publisher registered.")
+        if DEBUG_CURRENT_CODEPART: print("Command Publisher registered.")
         self._command = Float64MultiArray()
         self._command_zero = Float64MultiArray()
         self._command.data = [0.0] * l_embodiment.num_links
@@ -160,7 +166,7 @@ class GazeboEnv(gym.Env):
         self._unpause_gazebo_service = rospy.ServiceProxy('/gazebo/unpause_physics', Empty)
         self._reset_gazebo_service = rospy.ServiceProxy('/gazebo/reset_simulation', Empty)
         self._switch_controller_service = rospy.ServiceProxy('panda1/controller_manager/switch_controller', SwitchController)
-        if DEBUG: print("Services registered.")
+        if DEBUG_CURRENT_CODEPART: print("Services registered.")
 
         # TODO: Find good value for max reward
         self.reward_range = (-2, 0)
@@ -173,19 +179,20 @@ class GazeboEnv(gym.Env):
 
         # Respectively: l_joint_angles, l_joint_vels, t_joint_angles, t_joint_vels
         self.observation_space = gym.spaces.Box(
-            low=np.array([[-2.8973, -1.7628, -2.8973, -3.0718, -2.8973, -0.0175, -2.8973],
-                          [-2.1750, -2.1750, -2.1750, -2.1750, -2.6100, -2.6100, -2.6100],
-                          [-2.8973, -1.7628, -2.8973, -3.0718, -2.8973, -0.0175, -2.8973],
-                          [-2.1750, -2.1750, -2.1750, -2.1750, -2.6100, -2.6100, -2.6100]]),
-            high=np.array([[2.8973, 1.7628, 2.8973, -0.0698, 2.8973, 3.7525, 2.8973],
-                           [2.1750, 2.1750, 2.1750, 2.1750, 2.6100, 2.6100, 2.6100],
-                           [2.8973, 1.7628, 2.8973, -0.0698, 2.8973, 3.7525, 2.8973],
-                           [2.1750, 2.1750, 2.1750, 2.1750, 2.6100, 2.6100, 2.6100]]),
+            low=np.array([l_embodiment.angle_ranges[0],
+                          l_embodiment.velocity_ranges[0],
+                          e_embodiment.angles_ranges[0],
+                          e_embodiment.velocity_ranges[0]]),
+            high=np.array([l_embodiment.angle_ranges[1],
+                           l_embodiment.velocity_ranges[1],
+                           e_embodiment.angles_ranges[1],
+                           e_embodiment.velocity_ranges[1]]),
             dtype='float32')
 
     def __del__(self):
-        if DEBUG: print("Destructor.")
+        if DEBUG_CURRENT_CODEPART: print("Destructor.")
         self.bagfile.close()
+        self._actions_csv_file.close()
 
     def reset(self):
         """
@@ -194,15 +201,26 @@ class GazeboEnv(gym.Env):
         message to reset the state of the learner.
         :return: Current observation.
         """
-        if DEBUG: print("Reset method start.")
+        self._actions_csv_file.close()
+        self._actions_csv_file = open('../runs/monitor/last_episode_actions.csv', 'w')
+        self._actions_csv_writer = csv.writer(self._actions_csv_file, delimiter=',', quoting=csv.QUOTE_NONNUMERIC)
+
+        self.bagfile.close()
+        current_filename = random.choice(self.bagfilenames)
+        print()
+        print(current_filename)
+        self.bagfile = rosbag.Bag(current_filename)
+        self.bagfile_start_time = rospy.Time(self.bagfile.get_start_time())
+
+        if DEBUG_CURRENT_CODEPART: print("Reset method start.")
         self._command_publisher.publish(self._command_zero)
-        if DEBUG: print("Zero command published.")
+        if DEBUG_CURRENT_CODEPART: print("Zero command published.")
         self._reset_gazebo_service()
-        if DEBUG: print("Gazebo reset.")
+        if DEBUG_CURRENT_CODEPART: print("Gazebo reset.")
         self._unpause_gazebo_service()
-        if DEBUG: print("Gazebo unpaused.")
+        if DEBUG_CURRENT_CODEPART: print("Gazebo unpaused.")
         self._restart_controller('franka_sim_state_controller')
-        if DEBUG: print("Joint State Controller resetted.")
+        if DEBUG_CURRENT_CODEPART: print("Joint State Controller resetted.")
         self._received_first_ldata = False
         while self._received_first_ldata is False:
             try:
@@ -211,15 +229,15 @@ class GazeboEnv(gym.Env):
                 pass
         #self._restart_controller('effort_jointgroup_controller')
         self._pause_gazebo_service()
-        if DEBUG: print("Gazebo paused.")
+        if DEBUG_CURRENT_CODEPART: print("Gazebo paused.")
         self.current_step = 0
         try:
             self.e_position, self.e_velocity, self.e_effort = self._get_expert_state_from_bagfile(self.last_time_stamp)
             self.done = False
         except StopIteration:
-            if DEBUG: print("StopIteration Exception! Setting done->False")
+            if DEBUG_CURRENT_CODEPART: print("StopIteration Exception! Setting done->False")
             self.done = True
-        if DEBUG: print("Reset method end.")
+        if DEBUG_CURRENT_CODEPART: print("Reset method end.")
         self._command.data = [0.0] * self.l_embodiment.num_links
         return [self.l_position, self.l_velocity, self.e_position, self.e_velocity]
 
@@ -230,15 +248,19 @@ class GazeboEnv(gym.Env):
         :param action: A list of joint efforts to send to the joints of the learner.
         :return: The current state/observation, the immediate reward and the 'done' flag.
         """
-        if DEBUG: print("Running step {} with:\n{}".format(self.current_step, action))
+        print(type(action))
+        if DEBUG_STEP_ACTION: print("Running step {} with:".format(self.current_step))
+        if DEBUG_STEP_ACTION: print(repr(action))
+        self._actions_csv_writer.writerow(action)
 
         self._unpause_gazebo_service()
-        if DEBUG: print("Unpaused Gazebo.")
+        if DEBUG_CURRENT_CODEPART: print("Unpaused Gazebo.")
         self._restart_controller('franka_sim_state_controller')
-        if DEBUG: print("Restarted joint state controller.")
+        if DEBUG_CURRENT_CODEPART: print("Restarted joint state controller.")
         self._command.data = action
+        self._command.data[6] = 0
         self._command_publisher.publish(self._command)
-        if DEBUG: print("Published action.")
+        if DEBUG_CURRENT_CODEPART: print("Published action.")
         try:
             rospy.sleep(self.step_size)
             slept = True
@@ -246,20 +268,20 @@ class GazeboEnv(gym.Env):
             slept = False
         if slept is False:
             rospy.sleep(self.step_size)
-        if DEBUG: print("Slept.")
+        if DEBUG_CURRENT_CODEPART: print("Slept.")
         self._pause_gazebo_service()
-        if DEBUG: print("Paused Gazebo.")
+        if DEBUG_CURRENT_CODEPART: print("Paused Gazebo.")
         self.current_step += 1
         done = False
 
         try:
             self.e_position, self.e_velocity, self.e_effort = self._get_expert_state_from_bagfile(self.last_time_stamp)
         except StopIteration:
-            if DEBUG: print("StopIteration Exception! Setting done->False")
+            if DEBUG_CURRENT_CODEPART: print("StopIteration Exception! Setting done->False")
             done = True
 
         reward = self._calculate_reward(self.e_position, self.e_velocity, self.l_position, self.e_velocity)
-        if DEBUG: print("Reward: {}\n\n".format(reward))
+        if DEBUG_CURRENT_CODEPART: print("Reward: {}\n\n".format(reward))
         observation = [self.l_position, self.l_velocity, self.e_position, self.e_velocity]
 
         return observation, reward, done, {}
@@ -274,8 +296,8 @@ class GazeboEnv(gym.Env):
         :param joint_state: Received data from joint_states topic.
         """
         # if DEBUG: print("Callback start")
-        if np.isnan(joint_state.position).any() or np.isnan(joint_state.velocity).any():
-            if DEBUG: print("Received NaN in learner datas!")
+        # if np.isnan(joint_state.position).any() or np.isnan(joint_state.velocity).any():
+        #     if DEBUG: print("Received NaN in learner datas!")
         self.l_position = joint_state.position
         self.l_velocity = joint_state.velocity
         self.last_time_stamp = joint_state.header.stamp.secs + 1e-9 * joint_state.header.stamp.nsecs
@@ -305,7 +327,7 @@ class GazeboEnv(gym.Env):
                      time of first message in bag.
         :return: Lists containing the joint positions and velocities
         """
-        if DEBUG: print("Getting expert state from bagfile.")
+        if DEBUG_CURRENT_CODEPART: print("Getting expert state from bagfile.")
         expert_joint_state = next(self.bagfile.read_messages(topics=['/panda1/joint_states'],
                                                              start_time=self.bagfile_start_time + rospy.Duration(time),
                                                              end_time=self.bagfile_start_time + rospy.Duration(self.duration)))[1]
@@ -324,11 +346,11 @@ class GazeboEnv(gym.Env):
 
 
 if __name__ == '__main__':
-    env = GazeboEnv(0.1, 3.0, '../resources/torque_trajectory_002.bag', example_embodiments.panda_embodiment, example_embodiments.panda_embodiment)
+    env = GazeboEnv(0.1, 5.0, ['../resources/torque_trajectory_007.bag'], example_embodiments.panda_embodiment, example_embodiments.panda_embodiment)
     env.reset()
     #quit()
 
-    with open('../resources/torque_trajectory_002_commands.csv', newline='\n') as csvfile:
+    with open('../runs/monitor/fail_actions_003.csv', newline='\n') as csvfile:
         csv_reader = csv.reader(csvfile, delimiter=',', quoting=csv.QUOTE_NONNUMERIC)
         for line in csv_reader:
             obs, reward, done, _ = env.step(line)
