@@ -23,8 +23,23 @@ def rotmat_z_dot(angle, angle_dot):
                      [0, 0, 0, 0]])
 
 
+def plot_line_3d(gca, start, end, color='black', linewidth=1.0):
+    xs = [start[0], end[0]]
+    ys = [start[1], end[1]]
+    zs = [start[2], end[2]]
+    gca.plot(xs, ys, zs=zs, zdir='z', color=color, linewidth=linewidth)
+
+
+def plot_frame_axes(gca, frame, scale_factor=0.075):
+    frame = np.array(frame)[0:3, :]
+    origin = frame[:, 3]
+    plot_line_3d(gca, origin, origin + scale_factor * frame[:, 0], 'red', 2.0)
+    plot_line_3d(gca, origin, origin + scale_factor * frame[:, 1], 'green')
+    plot_line_3d(gca, origin, origin + scale_factor * frame[:, 2], 'blue')
+
+
 class Embodiment:
-    def __init__(self, relative_joint_frames, parent_ids, relative_link_frames=None, angle_ranges=None, velocity_ranges=None):
+    def __init__(self, relative_joint_frames, parent_ids, relative_link_frames=None, angle_ranges=None, velocity_ranges=None, effort_ranges=None):
         assert parent_ids[0] is None, "First element of learner_parent_ids must me 'None'!"
         for i in range(1, len(parent_ids)):
             assert parent_ids[i] < i, "Elements in learner_parent_ids can only refer to elements to the left!"
@@ -61,6 +76,14 @@ class Embodiment:
             assert len(velocity_ranges[0]) is self.num_links
             assert len(velocity_ranges[1]) is self.num_links
             self.velocity_ranges = np.array(velocity_ranges)
+
+        if effort_ranges is None:
+            self.effort_ranges = np.array([[-100] * self.num_links,
+                                           [100] * self.num_links])
+        else:
+            assert len(effort_ranges[0]) is self.num_links
+            assert len(effort_ranges[1]) is self.num_links
+            self.effort_ranges = np.array(velocity_ranges)
 
         self.link_dists_from_origin = self._link_positions_in_chain()
 
@@ -151,7 +174,7 @@ class Embodiment:
         return data_matrices, absolute_joint_frames
 
     # TODO: Draw frames/link velocities?
-    def plot(self, joint_angles, axes, normalized=False):
+    def plot(self, joint_angles, axes, normalized=False, link_frames=False):
         """
         Drawing function that plots the embodiment in given axes. Assumes a non-branched chain!
         :param joint_angles: Joint angles of configuration to plot.
@@ -159,17 +182,30 @@ class Embodiment:
         :param normalized: Flag if normalized coordinates should be used.
         :return: None
         """
-        absolute_joint_frames, relative_joint_frames = self.absolute_joint_frames(joint_angles, normalized)
+        absolute_joint_frames, absolute_link_frames = self.absolute_frames(joint_angles, normalized)
         xs = np.concatenate([[0], absolute_joint_frames[:, 0, 3]])
         ys = np.concatenate([[0], absolute_joint_frames[:, 1, 3]])
         zs = np.concatenate([[0], absolute_joint_frames[:, 2, 3]])
+        axes.set_xlabel("x")
+        axes.set_ylabel("y")
+        axes.set_zlabel("z")
 
         axes.plot(xs, ys, 'o-', zs=zs, zdir='z', color='black')
 
-    def show(self, joint_angles, normalized=False):
+        for joint_frame in absolute_joint_frames:
+            plot_frame_axes(axes, joint_frame, 0.03)
+
+        if link_frames:
+            for link_frame in absolute_link_frames:
+                # start = link_frame[0:3, 3]
+                # end = link_frame[0:3, 3] + 0.01 * link_frame[0:3, 0]
+                # axes.plot([start[0], end[0]], [start[1], end[1]], 'o-', zs=[start[2], end[2]], zdir='z', color='blue')
+                plot_frame_axes(axes, link_frame)
+
+    def show(self, joint_angles, normalized=False, link_frames=False):
         fig = plt.figure()
         axes = fig.gca(projection='3d')
-        self.plot(joint_angles, axes, normalized)
+        self.plot(joint_angles, axes, normalized, link_frames)
         axes.set_xlim3d(-0.95, 0.95)
         axes.set_ylim3d(-0.95, 0.95)
         axes.set_zlim3d(-0.1, 1)

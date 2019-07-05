@@ -21,8 +21,8 @@ import example_embodiments
 # TODO: Parallel environments
 
 
-DEBUG_CURRENT_CODEPART = False
-DEBUG_STEP_ACTION = True
+DEBUG_CURRENT_CODEPART = True
+DEBUG_STEP_ACTION = False
 
 
 
@@ -173,20 +173,20 @@ class GazeboEnv(gym.Env):
 
         # Joint torque ranges
         self.action_space = gym.spaces.Box(
-            low=np.array([-87, -87, -87, -87, -12, -12, -0.1]),
-            high=np.array([87, 87, 87, 87, 12, 12, 0.1]),
+            low=np.array(l_embodiment.effort_ranges[0]),
+            high=np.array(l_embodiment.effort_ranges[1]),
             dtype='float32')
 
-        # Respectively: l_joint_angles, l_joint_vels, t_joint_angles, t_joint_vels
+        # Respectively: l_joint_angles, l_joint_vels, e_joint_angles, e_joint_vels
         self.observation_space = gym.spaces.Box(
-            low=np.array([l_embodiment.angle_ranges[0],
-                          l_embodiment.velocity_ranges[0],
-                          e_embodiment.angles_ranges[0],
-                          e_embodiment.velocity_ranges[0]]),
-            high=np.array([l_embodiment.angle_ranges[1],
-                           l_embodiment.velocity_ranges[1],
-                           e_embodiment.angles_ranges[1],
-                           e_embodiment.velocity_ranges[1]]),
+            low=np.concatenate([l_embodiment.angle_ranges[0],
+                                l_embodiment.velocity_ranges[0],
+                                e_embodiment.angle_ranges[0],
+                                e_embodiment.velocity_ranges[0]]),
+            high=np.concatenate([l_embodiment.angle_ranges[1],
+                                 l_embodiment.velocity_ranges[1],
+                                 e_embodiment.angle_ranges[1],
+                                 e_embodiment.velocity_ranges[1]]),
             dtype='float32')
 
     def __del__(self):
@@ -219,15 +219,14 @@ class GazeboEnv(gym.Env):
         if DEBUG_CURRENT_CODEPART: print("Gazebo reset.")
         self._unpause_gazebo_service()
         if DEBUG_CURRENT_CODEPART: print("Gazebo unpaused.")
-        self._restart_controller('franka_sim_state_controller')
-        if DEBUG_CURRENT_CODEPART: print("Joint State Controller resetted.")
+        self._restart_state_controller()
+        if DEBUG_CURRENT_CODEPART: print("Joint State Controller reset.")
         self._received_first_ldata = False
         while self._received_first_ldata is False:
             try:
                 rospy.sleep(0.1)
             except rospy.exceptions.ROSTimeMovedBackwardsException:
                 pass
-        #self._restart_controller('effort_jointgroup_controller')
         self._pause_gazebo_service()
         if DEBUG_CURRENT_CODEPART: print("Gazebo paused.")
         self.current_step = 0
@@ -235,11 +234,11 @@ class GazeboEnv(gym.Env):
             self.e_position, self.e_velocity, self.e_effort = self._get_expert_state_from_bagfile(self.last_time_stamp)
             self.done = False
         except StopIteration:
-            if DEBUG_CURRENT_CODEPART: print("StopIteration Exception! Setting done->False")
+            if DEBUG_CURRENT_CODEPART: print("StopIteration Exception! Setting done->True")
             self.done = True
         if DEBUG_CURRENT_CODEPART: print("Reset method end.")
         self._command.data = [0.0] * self.l_embodiment.num_links
-        return [self.l_position, self.l_velocity, self.e_position, self.e_velocity]
+        return np.concatenate([self.l_position, self.l_velocity, self.e_position, self.e_velocity])
 
     def step(self, action):
         """
@@ -255,10 +254,9 @@ class GazeboEnv(gym.Env):
 
         self._unpause_gazebo_service()
         if DEBUG_CURRENT_CODEPART: print("Unpaused Gazebo.")
-        self._restart_controller('franka_sim_state_controller')
+        self._restart_state_controller()
         if DEBUG_CURRENT_CODEPART: print("Restarted joint state controller.")
         self._command.data = action
-        self._command.data[6] = 0
         self._command_publisher.publish(self._command)
         if DEBUG_CURRENT_CODEPART: print("Published action.")
         try:
@@ -277,12 +275,12 @@ class GazeboEnv(gym.Env):
         try:
             self.e_position, self.e_velocity, self.e_effort = self._get_expert_state_from_bagfile(self.last_time_stamp)
         except StopIteration:
-            if DEBUG_CURRENT_CODEPART: print("StopIteration Exception! Setting done->False")
+            if DEBUG_CURRENT_CODEPART: print("StopIteration Exception! Setting done->True")
             done = True
 
         reward = self._calculate_reward(self.e_position, self.e_velocity, self.l_position, self.e_velocity)
         if DEBUG_CURRENT_CODEPART: print("Reward: {}\n\n".format(reward))
-        observation = [self.l_position, self.l_velocity, self.e_position, self.e_velocity]
+        observation = np.concatenate([self.l_position, self.l_velocity, self.e_position, self.e_velocity])
 
         return observation, reward, done, {}
 
@@ -301,19 +299,19 @@ class GazeboEnv(gym.Env):
         self.l_position = joint_state.position
         self.l_velocity = joint_state.velocity
         self.last_time_stamp = joint_state.header.stamp.secs + 1e-9 * joint_state.header.stamp.nsecs
-        # if DEBUG: print("Callback end")
         if not self._received_first_ldata:
             self._received_first_ldata = True
 
-    def _restart_controller(self, controller):
+    def _restart_state_controller(self):
         """
         It is necessary to restart the joint state controller each time after unpausing gazebo in order to publish/
         receive joint_state messages.
         :return: None
         """
-        self._switch_controller_service(stop_controllers=[controller],
+        if DEBUG_CURRENT_CODEPART: print("GHGHGHGHHGHG")
+        self._switch_controller_service(stop_controllers=['franka_sim_state_controller'],
                                         strictness=SwitchControllerRequest.BEST_EFFORT)
-        self._switch_controller_service(start_controllers=[controller],
+        self._switch_controller_service(start_controllers=['franka_sim_state_controller'],
                                         strictness=SwitchControllerRequest.BEST_EFFORT)
 
         # franka_sim_state_controller

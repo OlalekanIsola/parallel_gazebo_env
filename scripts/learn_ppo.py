@@ -10,16 +10,16 @@ from stable_baselines.common.vec_env import DummyVecEnv
 from stable_baselines.results_plotter import ts2xy, load_results
 from stable_baselines.bench import Monitor
 
-description_str = "trajectory010_e7_l7_5sec_gamma0.3_t0_r1.0_lin0.001_rot0.01"
-log_dir = "../runs/tensorboard/ppo2_2019_06_26_trajectory010/"
-continue_learning = True
+description_str = "trajectory003_e7_l4_5sec_gamma0.3_t0_r1.0_lin0.001_rot0.01"
+log_dir = "../runs/tensorboard/ppo2_2019_07_03_trajectory002/"
+continue_learning = False
 # bagfiles = ["../resources/torque_trajectory_{0:03}.bag".format(i) for i in range(2, 10)]
-bagfiles = ["../resources/torque_trajectory_010.bag"]
-gazebo_env = GazeboEnv(0.1, 5.0, bagfiles, example_embodiments.panda_embodiment, example_embodiments.panda_embodiment)
+bagfiles = ["../resources/torque_trajectory_003.bag"]
+gazebo_env = GazeboEnv(0.1, 5.0, bagfiles, example_embodiments.panda_embodiment, example_embodiments.panda_4j_embodiment)
 env = DummyVecEnv([lambda: Monitor(gazebo_env, "../runs/monitor/", allow_early_resets=True)])
 
 if continue_learning:
-    model = PPO2.load("../runs/models/trajectory010_e7_l7_5sec_gamma0.3_t0_r1.0_lin0.001_rot0.01_best.pkl",
+    model = PPO2.load("../runs/models/trajectory003_e7_l4_5sec_gamma0.3_t0_r1.0_lin0.001_rot0.01_best.pkl",
                       env=env,
                       tensorboard_log=log_dir)
 else:
