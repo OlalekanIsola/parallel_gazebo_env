@@ -17,11 +17,10 @@ import example_embodiments
 
 
 # TODO: Generalization to different trajectories
-# TODO: Different embodiments/lock joints
 # TODO: Parallel environments
 
 
-DEBUG_CURRENT_CODEPART = True
+DEBUG_CURRENT_CODEPART = False
 DEBUG_STEP_ACTION = False
 
 
@@ -247,7 +246,6 @@ class GazeboEnv(gym.Env):
         :param action: A list of joint efforts to send to the joints of the learner.
         :return: The current state/observation, the immediate reward and the 'done' flag.
         """
-        print(type(action))
         if DEBUG_STEP_ACTION: print("Running step {} with:".format(self.current_step))
         if DEBUG_STEP_ACTION: print(repr(action))
         self._actions_csv_writer.writerow(action)
@@ -308,7 +306,6 @@ class GazeboEnv(gym.Env):
         receive joint_state messages.
         :return: None
         """
-        if DEBUG_CURRENT_CODEPART: print("GHGHGHGHHGHG")
         self._switch_controller_service(stop_controllers=['franka_sim_state_controller'],
                                         strictness=SwitchControllerRequest.BEST_EFFORT)
         self._switch_controller_service(start_controllers=['franka_sim_state_controller'],
