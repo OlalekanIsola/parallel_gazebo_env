@@ -25,7 +25,7 @@ reset_gazebo_service = rospy.ServiceProxy('/gazebo/reset_simulation', Empty)
 switch_controller_service = rospy.ServiceProxy('panda1/controller_manager/switch_controller', SwitchController)
 command = Float64MultiArray()
 
-for i in range(4, 100):
+for i in range(101, 200):
     reset_gazebo_service()
     unpause_gazebo_service()
     switch_controller_service(stop_controllers=["franka_sim_state_controller"],
@@ -38,6 +38,7 @@ for i in range(4, 100):
     rosbag_proc = subprocess.Popen(rosbag_command)
     time.sleep(0.5)
     command.data = random_angles().tolist()
+    # command.data = [1.2, 0.3, -1.0, -1.2, 2.0, 1.5, 0.1]
     command_publisher.publish(command)
     time.sleep(7)
     os.system('rosnode kill /my_bag')

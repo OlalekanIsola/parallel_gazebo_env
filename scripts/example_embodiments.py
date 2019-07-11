@@ -286,7 +286,7 @@ if __name__ == '__main__':
                   [0.0, 0.0, 2.0, 2.0],
                   [0.0, 0.0, 2.0, 3.0]]
     angles_3j = [-1.0, -1.0, -1.0]
-    panda_3j_embodiment.show(angles_3j)
+    panda_3j_embodiment.show(angles_3j, link_frames=True)
     # for angles4j in angles_4j0: panda_4j_embodiment.show(angles4j, link_frames=True)
 
     # joint_frames_panda, _ = panda_embodiment.absolute_joint_frames(angles, False)

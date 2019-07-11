@@ -144,8 +144,9 @@ class GazeboEnv(gym.Env):
         self.l_velocity = [0.0] * l_embodiment.num_links
 
         self.bagfilenames = bagfiles
-        self.bagfile = rosbag.Bag(bagfiles[0])
+        self.bagfile = rosbag.Bag(random.choice(self.bagfilenames))
         self.bagfile_start_time = rospy.Time(self.bagfile.get_start_time())
+        self.bagfile_usage_count = 0
         if DEBUG_CURRENT_CODEPART: print("Bagfile opened.")
 
         rospy.init_node('gym_environment_wrapper')
@@ -204,12 +205,14 @@ class GazeboEnv(gym.Env):
         self._actions_csv_file = open('../runs/monitor/last_episode_actions.csv', 'w')
         self._actions_csv_writer = csv.writer(self._actions_csv_file, delimiter=',', quoting=csv.QUOTE_NONNUMERIC)
 
-        self.bagfile.close()
-        current_filename = random.choice(self.bagfilenames)
-        print()
-        print(current_filename)
-        self.bagfile = rosbag.Bag(current_filename)
-        self.bagfile_start_time = rospy.Time(self.bagfile.get_start_time())
+        if self.bagfile_usage_count >= 2:
+            self.bagfile.close()
+            current_filename = random.choice(self.bagfilenames)
+            print()
+            print(current_filename)
+            self.bagfile = rosbag.Bag(current_filename)
+            self.bagfile_start_time = rospy.Time(self.bagfile.get_start_time())
+            self.bagfile_usage_count = 0
 
         if DEBUG_CURRENT_CODEPART: print("Reset method start.")
         self._command_publisher.publish(self._command_zero)
@@ -235,6 +238,7 @@ class GazeboEnv(gym.Env):
         except StopIteration:
             if DEBUG_CURRENT_CODEPART: print("StopIteration Exception! Setting done->True")
             self.done = True
+        self.bagfile_usage_count += 1
         if DEBUG_CURRENT_CODEPART: print("Reset method end.")
         self._command.data = [0.0] * self.l_embodiment.num_links
         return np.concatenate([self.l_position, self.l_velocity, self.e_position, self.e_velocity])
