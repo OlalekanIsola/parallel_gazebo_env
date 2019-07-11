@@ -20,7 +20,7 @@ import example_embodiments
 # TODO: Parallel environments
 
 
-DEBUG_CURRENT_CODEPART = False
+DEBUG_CURRENT_CODEPART = True
 DEBUG_STEP_ACTION = False
 
 
@@ -36,7 +36,7 @@ def link_distance(data_matrix1, data_matrix2):
     weight_t_dist = 0.0
     weight_o_dist = 1.0
     weight_lin_vel = 0.001
-    weight_rot_vel = 0.01
+    weight_rot_vel = 0.04
 
     translation_distance = np.linalg.norm(data_matrix1[:, 3] - data_matrix2[:, 3])
 

@@ -83,7 +83,7 @@ class Embodiment:
         else:
             assert len(effort_ranges[0]) is self.num_links
             assert len(effort_ranges[1]) is self.num_links
-            self.effort_ranges = np.array(velocity_ranges)
+            self.effort_ranges = np.array(effort_ranges)
 
         self.link_dists_from_origin = self._link_positions_in_chain()
 
